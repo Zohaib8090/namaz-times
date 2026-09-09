@@ -1,0 +1,7 @@
+{
+  "name": "Namaz Timing Reminder and Qibla Detector",
+  "description": "100% offline Islamic prayer times app with Hanafi/Shafi'i calculation, exact alarms, WorkManager auto-updates, and Qibla compass.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
