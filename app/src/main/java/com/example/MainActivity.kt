@@ -21,10 +21,14 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CompassCalibration
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.CompassCalibration
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -44,12 +48,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.MainViewModel
 import com.example.ui.home.HomeScreen
 import com.example.ui.qibla.QiblaScreen
+import com.example.ui.rakats.RakatsScreen
 import com.example.ui.settings.SettingsScreen
+import com.example.ui.tasbih.TasbihScreen
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkSurfaceElevated
 import com.example.ui.theme.DarkSurfaceGlass
@@ -72,6 +79,20 @@ sealed class Screen(
         title = "Namaz",
         activeIcon = Icons.Filled.AccessTime,
         inactiveIcon = Icons.Outlined.AccessTime
+    )
+
+    object Rakats : Screen(
+        route = "rakats",
+        title = "Rakats",
+        activeIcon = Icons.Filled.MenuBook,
+        inactiveIcon = Icons.Outlined.MenuBook
+    )
+
+    object Tasbih : Screen(
+        route = "tasbih",
+        title = "Tasbih",
+        activeIcon = Icons.Filled.TouchApp,
+        inactiveIcon = Icons.Outlined.TouchApp
     )
 
     object Qibla : Screen(
@@ -142,7 +163,7 @@ fun MainApp(viewModel: MainViewModel) {
     val qiblaAngle by viewModel.qiblaAngle.collectAsStateWithLifecycle()
     val distanceToMakkah by viewModel.distanceToMakkah.collectAsStateWithLifecycle()
 
-    val screens = listOf(Screen.Home, Screen.Qibla, Screen.Settings)
+    val screens = listOf(Screen.Home, Screen.Rakats, Screen.Tasbih, Screen.Qibla, Screen.Settings)
 
     Scaffold(
         modifier = Modifier
@@ -170,7 +191,9 @@ fun MainApp(viewModel: MainViewModel) {
                         label = {
                             Text(
                                 text = screen.title,
-                                color = if (selected) GoldAccent else TextMuted
+                                color = if (selected) GoldAccent else TextMuted,
+                                maxLines = 1,
+                                fontSize = 11.sp
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
@@ -211,6 +234,16 @@ fun MainApp(viewModel: MainViewModel) {
                                 snackbarHostState.showSnackbar("Alarm active for ${prayerType.displayName} Namaz")
                             }
                         }
+                    )
+                }
+
+                is Screen.Rakats -> {
+                    RakatsScreen()
+                }
+
+                is Screen.Tasbih -> {
+                    TasbihScreen(
+                        snackbarHostState = snackbarHostState
                     )
                 }
 
