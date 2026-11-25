@@ -8,6 +8,7 @@ data class PrayerEntity(
     @PrimaryKey
     val date: String, // Format: YYYY-MM-DD
     val fajrMillis: Long,
+    val sunriseMillis: Long = 0L,
     val dhuhrMillis: Long,
     val asrMillis: Long, // Hanafi calculation
     val asrShafiiMillis: Long, // Shafi'i calculation

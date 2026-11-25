@@ -242,7 +242,7 @@ fun HeaderSection(
                             color = TextPrimary,
                             maxLines = 1
                         )
-                        val timeZoneCode = java.util.TimeZone.getDefault().getDisplayName(false, java.util.TimeZone.SHORT)
+                        val timeZoneCode = java.util.TimeZone.getTimeZone(DateUtils.displayZone).getDisplayName(false, java.util.TimeZone.SHORT)
                         Text(
                             text = "Offline Calculations • $timeZoneCode",
                             style = MaterialTheme.typography.labelSmall,
@@ -332,13 +332,15 @@ fun CountdownHeroCard(
         label = "pulse_alpha"
     )
 
+    // A prayer is "current" while its time window is open (Fajr until sunrise, others until the next prayer)
+    val current = countdown?.currentPrayer
+    val next = countdown?.nextPrayer
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(8.dp, RoundedCornerShape(24.dp)),
-        colors = CardDefaults.cardColors(
-            containerColor = DarkSurfaceElevated
-        ),
+        colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
         shape = RoundedCornerShape(24.dp),
         border = CardDefaults.outlinedCardBorder().copy(
             brush = Brush.verticalGradient(
@@ -351,10 +353,7 @@ fun CountdownHeroCard(
                 .fillMaxWidth()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0x330F766E),
-                            Color(0x1A042F2E)
-                        )
+                        colors = listOf(Color(0x330F766E), Color(0x1A042F2E))
                     )
                 )
                 .padding(20.dp)
@@ -363,7 +362,8 @@ fun CountdownHeroCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Next Prayer Header & Arabic Name
+                // Header: label + Arabic name of the prayer shown in the big box
+                val heroType = (current ?: next)?.type
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -379,16 +379,15 @@ fun CountdownHeroCard(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "UPCOMING NAMAZ",
+                            text = if (current != null) "CURRENT NAMAZ" else "UPCOMING NAMAZ",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = GoldAccent,
                             letterSpacing = 1.2.sp
                         )
                     }
-
                     Text(
-                        text = countdown?.nextPrayer?.type?.arabicName ?: "",
+                        text = heroType?.arabicName ?: "",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = TextSecondary
@@ -397,17 +396,22 @@ fun CountdownHeroCard(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Next Prayer Name & Scheduled Time
                 Text(
-                    text = countdown?.nextPrayer?.type?.displayName ?: "Fajr",
+                    text = heroType?.displayName ?: "Fajr",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.ExtraBold,
                     color = TextPrimary
                 )
 
                 if (countdown != null) {
+                    val subtitle = if (current != null) {
+                        "${DateUtils.formatPrayerTime(countdown.currentStartMillis, is24Hour)} – " +
+                            DateUtils.formatPrayerTime(countdown.currentEndMillis, is24Hour)
+                    } else {
+                        "at ${DateUtils.formatPrayerTime(countdown.nextPrayer.timeMillis, is24Hour)}"
+                    }
                     Text(
-                        text = "at ${DateUtils.formatPrayerTime(countdown.nextPrayer.timeMillis, is24Hour)}",
+                        text = subtitle,
                         style = MaterialTheme.typography.titleSmall,
                         color = TextSecondary,
                         fontWeight = FontWeight.Medium
@@ -416,7 +420,7 @@ fun CountdownHeroCard(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // Big Live Seconds Countdown Display
+                // Big live countdown: time left in the current prayer, or time until the upcoming one
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = DarkBackground.copy(alpha = 0.85f),
@@ -430,7 +434,20 @@ fun CountdownHeroCard(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = countdown?.remainingFormatted ?: "00:00:00",
+                            text = if (current != null) "TIME LEFT IN ${current.type.displayName.uppercase()}" else "STARTS IN",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GoldAccent,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (current != null) {
+                                countdown?.currentRemainingFormatted ?: "00:00:00"
+                            } else {
+                                countdown?.remainingFormatted ?: "00:00:00"
+                            },
+                            modifier = Modifier.testTag("current_prayer_countdown"),
                             style = MaterialTheme.typography.displayMedium.copy(
                                 fontFamily = FontFamily.Monospace,
                                 letterSpacing = 2.sp
@@ -451,9 +468,9 @@ fun CountdownHeroCard(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Progress Bar towards next prayer
+                // Progress: how much of the current prayer window has passed (or of the wait for the next one)
                 LinearProgressIndicator(
-                    progress = { countdown?.progress ?: 0.5f },
+                    progress = { if (current != null) (countdown?.currentProgress ?: 0f) else (countdown?.progress ?: 0.5f) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
@@ -462,15 +479,62 @@ fun CountdownHeroCard(
                     trackColor = DarkSurfaceBorder
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Previous / Current Prayer context
-                if (countdown?.currentPrayer != null) {
-                    Text(
-                        text = "Current: ${countdown.currentPrayer.type.displayName} (${DateUtils.formatPrayerTime(countdown.currentPrayer.timeMillis, is24Hour)})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
+                // Small section: the next prayer and when it starts
+                if (countdown != null && next != null) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = DarkBackground.copy(alpha = 0.6f),
+                        border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(DarkSurfaceBorder, DarkSurfaceBorder))),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            if (current == null && countdown.sunriseMillis > 0L && next.type == PrayerType.DHUHR) {
+                                Text(
+                                    text = "Sunrise at ${DateUtils.formatPrayerTime(countdown.sunriseMillis, is24Hour)} • no Namaz time until Dhuhr",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextMuted
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "NEXT",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextMuted,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        text = "${next.type.displayName} at ${DateUtils.formatPrayerTime(next.timeMillis, is24Hour)}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextPrimary
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "STARTS IN",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextMuted,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        text = countdown.remainingFormatted,
+                                        modifier = Modifier.testTag("next_prayer_countdown"),
+                                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                                        fontWeight = FontWeight.Bold,
+                                        color = GoldLight
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

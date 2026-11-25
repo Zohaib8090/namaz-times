@@ -69,6 +69,7 @@ class PrayerRepository(
         val entity = PrayerEntity(
             date = dateKey,
             fajrMillis = fajrMillis,
+            sunriseMillis = hanafiPrayers.sunrise.time,
             dhuhrMillis = dhuhrMillis,
             asrMillis = asrHanafiMillis,
             asrShafiiMillis = asrShafiMillis,
@@ -124,6 +125,7 @@ class PrayerRepository(
                 PrayerEntity(
                     date = dateKey,
                     fajrMillis = hanafiPrayers.fajr.time,
+                    sunriseMillis = hanafiPrayers.sunrise.time,
                     dhuhrMillis = hanafiPrayers.dhuhr.time,
                     asrMillis = hanafiPrayers.asr.time,
                     asrShafiiMillis = shafiPrayers.asr.time,
@@ -160,6 +162,7 @@ class PrayerRepository(
             gregorianFormatted = DateUtils.formatGregorianDate(date),
             hijriFormatted = DateUtils.formatHijriDate(date),
             fajrMillis = entity.fajrMillis,
+            sunriseMillis = entity.sunriseMillis,
             dhuhrMillis = entity.dhuhrMillis,
             asrMillis = entity.asrMillis,
             asrShafiiMillis = entity.asrShafiiMillis,
@@ -169,48 +172,86 @@ class PrayerRepository(
         )
     }
 
+    /**
+     * Works out which prayer's time is running now and which one comes next.
+     *
+     * Prayer windows: Fajr ends at sunrise, Dhuhr/Asr/Maghrib end when the next prayer begins,
+     * Isha ends at the next Fajr. Between sunrise and Dhuhr no prayer is current.
+     */
     fun calculateCountdown(
         currentTimeMillis: Long,
         todayPrayers: CalculatedPrayerDay,
-        tomorrowFajrMillis: Long
+        tomorrowFajrMillis: Long,
+        yesterdayIshaMillis: Long = 0L
     ): NextPrayerCountdown {
         val prayers = todayPrayers.prayers
+        val nextIdx = prayers.indexOfFirst { currentTimeMillis < it.timeMillis }
+
+        val nextPrayer = if (nextIdx >= 0) prayers[nextIdx] else PrayerTimeItem(PrayerType.FAJR, tomorrowFajrMillis)
 
         var currentPrayer: PrayerTimeItem? = null
-        var nextPrayer: PrayerTimeItem? = null
-        var previousPrayerMillis = 0L
+        var currentStart = 0L
+        var currentEnd = 0L
+        var previousPrayerMillis: Long
 
-        // Find current and next prayer
-        for (i in prayers.indices) {
-            val prayer = prayers[i]
-            if (currentTimeMillis < prayer.timeMillis) {
-                nextPrayer = prayer
-                currentPrayer = if (i > 0) prayers[i - 1] else null
-                previousPrayerMillis = if (i > 0) prayers[i - 1].timeMillis else todayPrayers.fajrMillis - (6 * 3600 * 1000L)
-                break
+        when {
+            nextIdx == -1 -> {
+                // After Isha: Isha runs until tomorrow's Fajr
+                currentPrayer = prayers.last()
+                currentStart = currentPrayer.timeMillis
+                currentEnd = tomorrowFajrMillis
+                previousPrayerMillis = currentStart
+            }
+            nextIdx == 0 -> {
+                // Before today's Fajr: yesterday's Isha is still running
+                if (yesterdayIshaMillis > 0L) {
+                    currentPrayer = PrayerTimeItem(PrayerType.ISHA, yesterdayIshaMillis)
+                    currentStart = yesterdayIshaMillis
+                    currentEnd = nextPrayer.timeMillis
+                }
+                previousPrayerMillis = todayPrayers.fajrMillis - (6 * 3600 * 1000L)
+            }
+            else -> {
+                val prev = prayers[nextIdx - 1]
+                previousPrayerMillis = prev.timeMillis
+                val windowEnd = if (prev.type == PrayerType.FAJR && todayPrayers.sunriseMillis > 0L) {
+                    todayPrayers.sunriseMillis
+                } else {
+                    nextPrayer.timeMillis
+                }
+                if (currentTimeMillis < windowEnd) {
+                    currentPrayer = prev
+                    currentStart = prev.timeMillis
+                    currentEnd = windowEnd
+                }
             }
         }
 
-        // If all prayers passed today, next is tomorrow's Fajr
-        if (nextPrayer == null) {
-            currentPrayer = prayers.last() // Isha
-            nextPrayer = PrayerTimeItem(PrayerType.FAJR, tomorrowFajrMillis)
-            previousPrayerMillis = prayers.last().timeMillis
-        }
-
-        val remainingMillis = (nextPrayer.timeMillis - currentTimeMillis).coerceAtLeast(0L)
-        val remainingSeconds = remainingMillis / 1000L
-
+        val remainingSeconds = (nextPrayer.timeMillis - currentTimeMillis).coerceAtLeast(0L) / 1000L
         val totalInterval = (nextPrayer.timeMillis - previousPrayerMillis).coerceAtLeast(1L)
         val elapsed = (currentTimeMillis - previousPrayerMillis).coerceAtLeast(0L)
         val progress = (elapsed.toFloat() / totalInterval.toFloat()).coerceIn(0f, 1f)
+
+        val currentRemainingSeconds = if (currentPrayer != null) {
+            (currentEnd - currentTimeMillis).coerceAtLeast(0L) / 1000L
+        } else 0L
+        val currentProgress = if (currentPrayer != null) {
+            val total = (currentEnd - currentStart).coerceAtLeast(1L)
+            ((currentTimeMillis - currentStart).toFloat() / total.toFloat()).coerceIn(0f, 1f)
+        } else 0f
 
         return NextPrayerCountdown(
             nextPrayer = nextPrayer,
             currentPrayer = currentPrayer,
             remainingSeconds = remainingSeconds,
             remainingFormatted = DateUtils.formatCountdown(remainingSeconds),
-            progress = progress
+            progress = progress,
+            currentStartMillis = currentStart,
+            currentEndMillis = currentEnd,
+            currentRemainingSeconds = currentRemainingSeconds,
+            currentRemainingFormatted = DateUtils.formatCountdown(currentRemainingSeconds),
+            currentProgress = currentProgress,
+            sunriseMillis = todayPrayers.sunriseMillis
         )
     }
 

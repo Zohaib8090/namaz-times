@@ -39,7 +39,7 @@ class KarachiNamazApp : Application() {
         applicationScope.launch {
             try {
                 val prefs = userPreferencesRepository.userPreferencesFlow.first()
-                val today = LocalDate.now()
+                val today = LocalDate.now(prefs.zoneId())
                 val todayPrayers = prayerRepository.getPrayerTimesForDate(
                     today,
                     prefs.latitude,

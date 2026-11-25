@@ -44,9 +44,10 @@ object LocationHelper {
     }
 
     @SuppressLint("MissingPermission")
-    suspend fun getCurrentLocation(context: Context): AppLocation = withContext(Dispatchers.IO) {
+    /** Returns null when no fix could be obtained (no permission, GPS off, timeout). */
+    suspend fun getCurrentLocation(context: Context): AppLocation? = withContext(Dispatchers.IO) {
         if (!hasLocationPermission(context)) {
-            return@withContext KARACHI_DEFAULT
+            return@withContext null
         }
 
         try {
@@ -90,10 +91,10 @@ object LocationHelper {
                     name = cityName
                 )
             } else {
-                KARACHI_DEFAULT
+                null
             }
         } catch (e: Exception) {
-            KARACHI_DEFAULT
+            null
         }
     }
 
@@ -106,18 +107,18 @@ object LocationHelper {
                         val addresses = geocoder.getFromLocation(lat, lng, 1)
                         if (!addresses.isNullOrEmpty()) {
                             val addr = addresses[0]
-                            val city = addr.locality ?: addr.subAdminArea ?: addr.adminArea ?: "Karachi"
-                            val country = addr.countryName ?: "Pakistan"
-                            "$city, $country"
+                            val city = addr.locality ?: addr.subAdminArea ?: addr.adminArea
+                            val country = addr.countryName
+                            listOfNotNull(city, country).joinToString(", ").ifBlank { null }
                         } else null
                     } else {
                         @Suppress("DEPRECATION")
                         val addresses = geocoder.getFromLocation(lat, lng, 1)
                         if (!addresses.isNullOrEmpty()) {
                             val addr = addresses[0]
-                            val city = addr.locality ?: addr.subAdminArea ?: addr.adminArea ?: "Karachi"
-                            val country = addr.countryName ?: "Pakistan"
-                            "$city, $country"
+                            val city = addr.locality ?: addr.subAdminArea ?: addr.adminArea
+                            val country = addr.countryName
+                            listOfNotNull(city, country).joinToString(", ").ifBlank { null }
                         } else null
                     }
                 } else null
@@ -126,15 +127,10 @@ object LocationHelper {
                 return@withContext resolved
             }
 
-            // Fallback based on coordinates proximity
-            val distToKarachi = Math.hypot(lat - 24.8607, lng - 67.0011)
-            if (distToKarachi < 0.5) {
-                "Karachi, Pakistan"
-            } else {
-                String.format(Locale.ENGLISH, "%.3f°, %.3f°", lat, lng)
-            }
+            // Geocoder unavailable (offline): show the coordinates
+            String.format(Locale.ENGLISH, "%.3f°, %.3f°", lat, lng)
         } catch (e: Exception) {
-            "Karachi, Pakistan"
+            String.format(Locale.ENGLISH, "%.3f°, %.3f°", lat, lng)
         }
     }
 }
