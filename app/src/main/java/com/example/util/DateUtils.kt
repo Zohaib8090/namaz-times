@@ -12,6 +12,10 @@ import java.util.Locale
 
 object DateUtils {
 
+    /** Time zone of the selected place; prayer times are shown in it. Set from the view model. */
+    @Volatile
+    var displayZone: ZoneId = ZoneId.systemDefault()
+
     private val ISLAMIC_MONTHS = listOf(
         "Muharram", "Safar", "Rabi' al-Awwal", "Rabi' al-Thani",
         "Jumada al-Awwal", "Jumada al-Thani", "Rajab", "Sha'ban",
@@ -44,6 +48,7 @@ object DateUtils {
     fun formatPrayerTime(millis: Long, is24Hour: Boolean = false): String {
         val pattern = if (is24Hour) "HH:mm" else "h:mm a"
         val sdf = SimpleDateFormat(pattern, Locale.ENGLISH)
+        sdf.timeZone = java.util.TimeZone.getTimeZone(displayZone)
         return sdf.format(Date(millis))
     }
 
@@ -56,6 +61,6 @@ object DateUtils {
     }
 
     fun toLocalDate(millis: Long): LocalDate {
-        return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+        return Instant.ofEpochMilli(millis).atZone(displayZone).toLocalDate()
     }
 }

@@ -139,7 +139,8 @@ fun MainApp(viewModel: MainViewModel) {
         val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (locationGranted) {
-            viewModel.refreshLocation()
+            // Only auto-detect when the user hasn't picked a city by hand
+            viewModel.refreshLocation(onlyIfAuto = true)
         }
     }
 
@@ -152,6 +153,10 @@ fun MainApp(viewModel: MainViewModel) {
         permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
 
         permissionsLauncher.launch(permissionsToRequest.toTypedArray())
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
     }
 
     val todayPrayers by viewModel.todayPrayers.collectAsStateWithLifecycle()
@@ -273,12 +278,8 @@ fun MainApp(viewModel: MainViewModel) {
                                 snackbarHostState.showSnackbar("Updating location from GPS...")
                             }
                         },
-                        onResetKarachi = {
-                            viewModel.resetToKarachi()
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Reset location to Karachi (24.8607° N, 67.0011° E)")
-                            }
-                        },
+                        onResetKarachi = { viewModel.resetToKarachi() },
+                        onSelectLocation = { name, lat, lng, tz -> viewModel.selectLocation(name, lat, lng, tz) },
                         onTestNotification = { prayerType ->
                             viewModel.testPrayerNotification(prayerType)
                             coroutineScope.launch {

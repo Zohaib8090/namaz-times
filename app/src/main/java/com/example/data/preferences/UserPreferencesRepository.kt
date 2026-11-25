@@ -25,12 +25,19 @@ data class UserPreferences(
     val longitude: Double = 67.0011,
     val locationName: String = "Karachi, Pakistan",
     val autoLocation: Boolean = true,
+    val timezoneId: String = "", // "" = follow the device time zone
     val fajrSound: String = NotificationSound.FAJR_DAWN.id,
     val dhuhrSound: String = NotificationSound.AZAN_MAKKAH.id,
     val asrSound: String = NotificationSound.AZAN_MADINAH.id,
     val maghribSound: String = NotificationSound.AZAN_MAKKAH.id,
     val ishaSound: String = NotificationSound.TAKBIR_CHIME.id
 ) {
+    fun zoneId(): java.time.ZoneId = try {
+        if (timezoneId.isBlank()) java.time.ZoneId.systemDefault() else java.time.ZoneId.of(timezoneId)
+    } catch (e: Exception) {
+        java.time.ZoneId.systemDefault()
+    }
+
     fun getSoundForPrayer(prayerName: String): NotificationSound {
         val soundId = when (prayerName.lowercase()) {
             "fajr" -> fajrSound
@@ -56,6 +63,7 @@ class UserPreferencesRepository(private val context: Context) {
         val LONGITUDE = doublePreferencesKey("longitude")
         val LOCATION_NAME = stringPreferencesKey("location_name")
         val AUTO_LOCATION = booleanPreferencesKey("auto_location")
+        val TIMEZONE_ID = stringPreferencesKey("timezone_id")
         val FAJR_SOUND = stringPreferencesKey("fajr_sound")
         val DHUHR_SOUND = stringPreferencesKey("dhuhr_sound")
         val ASR_SOUND = stringPreferencesKey("asr_sound")
@@ -74,6 +82,7 @@ class UserPreferencesRepository(private val context: Context) {
             longitude = preferences[PreferencesKeys.LONGITUDE] ?: 67.0011,
             locationName = preferences[PreferencesKeys.LOCATION_NAME] ?: "Karachi, Pakistan",
             autoLocation = preferences[PreferencesKeys.AUTO_LOCATION] ?: true,
+            timezoneId = preferences[PreferencesKeys.TIMEZONE_ID] ?: "",
             fajrSound = preferences[PreferencesKeys.FAJR_SOUND] ?: NotificationSound.FAJR_DAWN.id,
             dhuhrSound = preferences[PreferencesKeys.DHUHR_SOUND] ?: NotificationSound.AZAN_MAKKAH.id,
             asrSound = preferences[PreferencesKeys.ASR_SOUND] ?: NotificationSound.AZAN_MADINAH.id,
@@ -134,11 +143,17 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun setLocation(lat: Double, lng: Double, name: String) {
+    /**
+     * @param timezoneId IANA zone of the place ("" = device time zone, e.g. for GPS fixes)
+     * @param auto true when the place came from GPS, false when the user picked it by hand
+     */
+    suspend fun setLocation(lat: Double, lng: Double, name: String, timezoneId: String = "", auto: Boolean = false) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.LATITUDE] = lat
             preferences[PreferencesKeys.LONGITUDE] = lng
             preferences[PreferencesKeys.LOCATION_NAME] = name
+            preferences[PreferencesKeys.TIMEZONE_ID] = timezoneId
+            preferences[PreferencesKeys.AUTO_LOCATION] = auto
         }
     }
 

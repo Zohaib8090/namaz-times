@@ -63,7 +63,7 @@ class DailyUpdateWorker(
         return try {
             val app = applicationContext as? KarachiNamazApp ?: return Result.failure()
             val prefs = app.userPreferencesRepository.userPreferencesFlow.first()
-            val today = LocalDate.now()
+            val today = LocalDate.now(prefs.zoneId())
             val tomorrow = today.plusDays(1)
 
             val lat = prefs.latitude

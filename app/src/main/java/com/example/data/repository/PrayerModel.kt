@@ -25,6 +25,7 @@ data class CalculatedPrayerDay(
     val gregorianFormatted: String,
     val hijriFormatted: String,
     val fajrMillis: Long,
+    val sunriseMillis: Long = 0L,
     val dhuhrMillis: Long,
     val asrMillis: Long,
     val asrShafiiMillis: Long,
@@ -38,5 +39,12 @@ data class NextPrayerCountdown(
     val currentPrayer: PrayerTimeItem?,
     val remainingSeconds: Long,
     val remainingFormatted: String,
-    val progress: Float
+    val progress: Float,
+    // Window of the prayer whose time is running right now (null between sunrise and Dhuhr)
+    val currentStartMillis: Long = 0L,
+    val currentEndMillis: Long = 0L,
+    val currentRemainingSeconds: Long = 0L,
+    val currentRemainingFormatted: String = "00:00:00",
+    val currentProgress: Float = 0f, // fraction of the current prayer window already elapsed
+    val sunriseMillis: Long = 0L
 )

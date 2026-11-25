@@ -28,7 +28,7 @@ class BootReceiver : BroadcastReceiver() {
                 val app = context.applicationContext as? KarachiNamazApp
                 if (app != null) {
                     val prefs = app.userPreferencesRepository.userPreferencesFlow.first()
-                    val today = LocalDate.now()
+                    val today = LocalDate.now(prefs.zoneId())
                     val lat = prefs.latitude
                     val lng = prefs.longitude
                     val isHanafi = prefs.isHanafi

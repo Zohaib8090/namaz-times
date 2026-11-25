@@ -10,16 +10,21 @@ import com.example.data.repository.NextPrayerCountdown
 import com.example.data.repository.PrayerType
 import com.example.ui.qibla.CompassSensorManager
 import com.example.util.AlarmScheduler
+import com.example.util.DateUtils
 import com.example.util.LocationHelper
 import com.example.util.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -62,8 +67,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    /** One-off status messages for the UI (shown as snackbars). */
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
+
     private var tickerJob: Job? = null
     private var tomorrowFajrMillis: Long = 0L
+    private var yesterdayIshaMillis: Long = 0L
+    @Volatile private var isReloading = false
 
     init {
         // Observe preferences and recalculate on IO dispatcher
@@ -83,8 +94,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             while (isActive) {
                 val currentToday = _todayPrayers.value
                 if (currentToday != null) {
+                    val prefs = _userPreferences.value
+                    // New day in the selected place -> recalculate everything
+                    if (!isReloading && currentToday.date != LocalDate.now(prefs.zoneId())) {
+                        isReloading = true
+                        try {
+                            loadPrayerData(prefs)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        } finally {
+                            isReloading = false
+                        }
+                    }
                     val now = System.currentTimeMillis()
-                    val cd = prayerRepo.calculateCountdown(now, currentToday, tomorrowFajrMillis)
+                    val cd = prayerRepo.calculateCountdown(now, _todayPrayers.value ?: currentToday, tomorrowFajrMillis, yesterdayIshaMillis)
                     _countdown.value = cd
                 }
                 delay(1000)
@@ -93,7 +116,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun loadPrayerData(prefs: UserPreferences) = withContext(Dispatchers.Default) {
-        val today = LocalDate.now()
+        DateUtils.displayZone = prefs.zoneId()
+        val today = LocalDate.now(prefs.zoneId())
         val lat = prefs.latitude
         val lng = prefs.longitude
         val isHanafi = prefs.isHanafi
@@ -113,13 +137,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val tomorrowDay = prayerRepo.getPrayerTimesForDate(today.plusDays(1), lat, lng, isHanafi, method)
         tomorrowFajrMillis = tomorrowDay.fajrMillis
 
+        // Yesterday's Isha is still running until Fajr, so we need it for the time before Fajr
+        yesterdayIshaMillis = prayerRepo.getPrayerTimesForDate(today.minusDays(1), lat, lng, isHanafi, method).ishaMillis
+
         // Calculate 7 days
         val weekList = prayerRepo.getWeekPrayerTimes(today, lat, lng, isHanafi, method)
         _weekPrayers.value = weekList
 
         // Trigger immediate countdown update
         val now = System.currentTimeMillis()
-        _countdown.value = prayerRepo.calculateCountdown(now, todayDay, tomorrowFajrMillis)
+        _countdown.value = prayerRepo.calculateCountdown(now, todayDay, tomorrowFajrMillis, yesterdayIshaMillis)
 
         // Reschedule alarms off the main thread
         withContext(Dispatchers.IO) {
@@ -127,17 +154,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun refreshLocation() {
+    /**
+     * Detects the GPS position and makes it the active place.
+     * @param onlyIfAuto when true (app start) nothing happens if the user picked a city by hand.
+     */
+    fun refreshLocation(onlyIfAuto: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
+            if (onlyIfAuto && !prefsRepo.userPreferencesFlow.first().autoLocation) return@launch
             _isRefreshing.value = true
             try {
                 val detected = LocationHelper.getCurrentLocation(getApplication())
-                prefsRepo.setLocation(detected.latitude, detected.longitude, detected.name)
+                if (detected != null) {
+                    prefsRepo.setLocation(detected.latitude, detected.longitude, detected.name, timezoneId = "", auto = true)
+                } else if (!onlyIfAuto) {
+                    _messages.tryEmit("Couldn't get GPS location. Check location permission/GPS, or choose a city manually.")
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
                 _isRefreshing.value = false
             }
+        }
+    }
+
+    fun selectLocation(name: String, lat: Double, lng: Double, timezoneId: String) {
+        viewModelScope.launch {
+            prefsRepo.setLocation(lat, lng, name, timezoneId = timezoneId, auto = false)
+            _messages.tryEmit("Location set to $name")
         }
     }
 
@@ -171,20 +214,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setManualCoordinates(lat: Double, lng: Double, name: String) {
-        viewModelScope.launch {
-            prefsRepo.setLocation(lat, lng, name)
-        }
-    }
-
     fun resetToKarachi() {
-        viewModelScope.launch {
-            prefsRepo.setLocation(
-                LocationHelper.KARACHI_DEFAULT.latitude,
-                LocationHelper.KARACHI_DEFAULT.longitude,
-                LocationHelper.KARACHI_DEFAULT.name
-            )
-        }
+        val k = LocationHelper.KARACHI_DEFAULT
+        selectLocation(k.name, k.latitude, k.longitude, "Asia/Karachi")
     }
 
     fun setPrayerSound(prayerName: String, sound: com.example.util.NotificationSound) {

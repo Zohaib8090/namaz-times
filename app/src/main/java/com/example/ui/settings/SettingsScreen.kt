@@ -106,11 +106,23 @@ fun SettingsScreen(
     onSetAllPrayerSounds: (NotificationSound) -> Unit,
     onRefreshLocation: () -> Unit,
     onResetKarachi: () -> Unit,
+    onSelectLocation: (String, Double, Double, String) -> Unit,
     onTestNotification: (PrayerType) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var isMethodDropdownOpen by remember { mutableStateOf(false) }
+    var showLocationPicker by remember { mutableStateOf(false) }
+
+    if (showLocationPicker) {
+        LocationPickerDialog(
+            onDismiss = { showLocationPicker = false },
+            onSelect = { name, lat, lng, tz ->
+                onSelectLocation(name, lat, lng, tz)
+                showLocationPicker = false
+            }
+        )
+    }
 
     // Dialog state for selecting prayer sound: null = closed, "ALL" = all prayers, or "Fajr", "Dhuhr", etc.
     var prayerSoundTarget by remember { mutableStateOf<String?>(null) }
@@ -504,7 +516,8 @@ fun SettingsScreen(
                             color = TextPrimary
                         )
                         Text(
-                            text = "${userPrefs.latitude.format(4)}° N, ${userPrefs.longitude.format(4)}° E",
+                            text = "${kotlin.math.abs(userPrefs.latitude).format(4)}° ${if (userPrefs.latitude >= 0) "N" else "S"}, ${kotlin.math.abs(userPrefs.longitude).format(4)}° ${if (userPrefs.longitude >= 0) "E" else "W"}" +
+                                if (userPrefs.autoLocation) " • GPS" else " • Manual",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary
                         )
@@ -538,6 +551,19 @@ fun SettingsScreen(
                     ) {
                         Text("Karachi Default")
                     }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = { showLocationPicker = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("choose_city_button"),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = GoldAccent),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Choose another city / coordinates")
                 }
             }
         }

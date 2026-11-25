@@ -45,7 +45,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
 
                 // Re-sync / ensure future alarms are scheduled
                 if (app != null) {
-                    val today = java.time.LocalDate.now()
+                    val today = java.time.LocalDate.now(userPrefs?.zoneId() ?: java.time.ZoneId.systemDefault())
                     val lat = userPrefs?.latitude ?: 24.8607
                     val lng = userPrefs?.longitude ?: 67.0011
                     val isHanafi = userPrefs?.isHanafi ?: true
